@@ -4,9 +4,11 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import pyodide_http
 from plotly.subplots import make_subplots
 import warnings
 
+pyodide_http.patch_all()
 warnings.filterwarnings('ignore')
 
 # Load the data
