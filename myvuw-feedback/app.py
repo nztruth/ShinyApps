@@ -7,60 +7,14 @@ import plotly.graph_objects as go
 import pyodide_http
 from plotly.subplots import make_subplots
 import warnings
-import sys
-import os
 
 pyodide_http.patch_all()
 warnings.filterwarnings('ignore')
 
-
-# Function to load CSV files in Shinylive environment
-def load_csv_shinylive(filename):
-    """Load CSV file compatible with Shinylive environment"""
-    try:
-        # Try different possible paths
-        paths_to_try = [
-            filename,  # Current directory
-            f'./{filename}',  # Explicit current directory
-            f'/home/pyodide/{filename}',  # Pyodide home
-            f'/home/web_user/{filename}',  # Alternative home
-        ]
-
-        # Also check if we're in a specific app directory
-        if hasattr(sys, 'path') and len(sys.path) > 0:
-            app_dir = sys.path[0]
-            if app_dir:
-                paths_to_try.append(os.path.join(app_dir, filename))
-
-        for path in paths_to_try:
-            try:
-                df = pd.read_csv(path)
-                print(f"Successfully loaded {filename} from {path}")
-                return df
-            except:
-                continue
-
-        # If all paths fail, try using pyodide's fetch mechanism
-        try:
-            from pyodide.http import open_url
-            url = f'./{filename}'
-            df = pd.read_csv(open_url(url))
-            print(f"Successfully loaded {filename} using open_url")
-            return df
-        except:
-            pass
-
-        raise FileNotFoundError(f"Could not find {filename} in any location")
-
-    except Exception as e:
-        print(f"Error loading {filename}: {str(e)}")
-        raise
-
-
-# Load the data with error handling
+# Load the data
 try:
-    feedback_df = load_csv_shinylive('tbl_AllFeedback.csv')
-    avg_feedback_df = load_csv_shinylive('qry_AverageFeedback.csv')
+    feedback_df = pd.read_csv('tbl_AllFeedback.csv')
+    avg_feedback_df = pd.read_csv('qry_AverageFeedback.csv')
 except FileNotFoundError as e:
     print("=" * 60)
     print("ERROR: Required CSV files not found!")
@@ -69,41 +23,7 @@ except FileNotFoundError as e:
     print("  - tbl_AllFeedback.csv")
     print("  - qry_AverageFeedback.csv")
     print("=" * 60)
-    print(f"Error details: {e}")
-
-    # Create dummy data for demonstration if files not found
-    print("\nCreating dummy data for demonstration purposes...")
-
-    # Create dummy feedback_df
-    years = [2020, 2021, 2022, 2023]
-    courses = ['COMP101', 'COMP102', 'MATH101', 'PHYS101', 'CHEM101']
-
-    data = []
-    for year in years:
-        for course in courses:
-            data.append({
-                'Year': year,
-                'Course Code': course,
-                'Course Title': f'{course} - Introduction to {course[:-3]}',
-                'Course Letter': course[:4],
-                'Responses': np.random.randint(20, 100),
-                'Enrolled': np.random.randint(50, 150),
-                'Low Sample': np.random.choice([True, False], p=[0.2, 0.8]),
-                'Q1: Well-organised': np.random.uniform(1.5, 4.5),
-                'Q2: Clear communication': np.random.uniform(1.5, 4.5),
-                'Q3: Assessment helped': np.random.uniform(1.5, 4.5),
-                'Q4: Helpful feedback': np.random.uniform(1.5, 4.5),
-                'Q5: Workload (3=ideal)': np.random.uniform(2.0, 4.0),
-                'Q6: Understanding': np.random.uniform(1.5, 4.5),
-                'Q7: Interest': np.random.uniform(1.5, 4.5),
-                'Q8: Valuable': np.random.uniform(1.5, 4.5),
-                'Q9: Overall quality': np.random.uniform(1.5, 4.5),
-            })
-
-    feedback_df = pd.DataFrame(data)
-    avg_feedback_df = feedback_df.groupby('Course Code').mean().reset_index()
-
-    print("Dummy data created successfully!")
+    raise SystemExit(f"Missing file: {e}")
 
 # Prepare data - remove rank columns
 rank_columns = [col for col in feedback_df.columns if 'Rank' in col]
@@ -140,26 +60,27 @@ COLORS = {
 }
 
 
-# Create shared filter sidebar
-def create_filter_sidebar():
+# Create shared filter sidebar - NOW WITH UNIQUE IDS FOR EACH PAGE
+def create_filter_sidebar(page_suffix=""):
+    """Create filter sidebar with unique IDs for each page"""
     return ui.sidebar(
         ui.h4("Filters", class_="mb-3"),
         ui.input_select(
-            "year_filter",
+            f"year_filter{page_suffix}",
             "Year(s):",
             choices=["All"] + [str(y) for y in years],
             selected="All",
             multiple=True
         ),
         ui.input_select(
-            "dept_filter",
+            f"dept_filter{page_suffix}",
             "Department(s):",
             choices=["All"] + course_letters,
             selected="All",
             multiple=True
         ),
         ui.input_slider(
-            "response_filter",
+            f"response_filter{page_suffix}",
             "Min Responses:",
             min=0,
             max=100,
@@ -167,7 +88,7 @@ def create_filter_sidebar():
             step=5
         ),
         ui.input_switch(
-            "exclude_low_sample",
+            f"exclude_low_sample{page_suffix}",
             "Exclude Low Sample",
             value=True
         ),
@@ -275,7 +196,7 @@ app_ui = ui.page_navbar(
     ui.nav_panel(
         "Course Analysis",
         ui.layout_sidebar(
-            create_filter_sidebar(),
+            create_filter_sidebar("_course"),
             ui.layout_columns(
                 ui.card(
                     ui.card_header("Course Selection"),
@@ -330,7 +251,7 @@ app_ui = ui.page_navbar(
     ui.nav_panel(
         "Comparisons",
         ui.layout_sidebar(
-            create_filter_sidebar(),
+            create_filter_sidebar("_compare"),
             ui.layout_columns(
                 ui.card(
                     ui.card_header("Course Comparison Tool"),
@@ -374,7 +295,7 @@ app_ui = ui.page_navbar(
     ui.nav_panel(
         "Department View",
         ui.layout_sidebar(
-            create_filter_sidebar(),
+            create_filter_sidebar("_dept"),
             ui.layout_columns(
                 ui.card(
                     ui.card_header("Department Analysis"),
@@ -412,7 +333,7 @@ app_ui = ui.page_navbar(
     ui.nav_panel(
         "Data Explorer",
         ui.layout_sidebar(
-            create_filter_sidebar(),
+            create_filter_sidebar("_data"),
             ui.layout_columns(
                 ui.card(
                     ui.card_header("Data Explorer"),
@@ -527,21 +448,131 @@ app_ui = ui.page_navbar(
 
 
 def server(input: Inputs, output: Outputs, session: Session):
-    # Reactive calculations
+    # Store filter values reactively to sync across pages
+    filter_state = reactive.Value({
+        'year': ["All"],
+        'dept': ["All"],
+        'response': 10,
+        'exclude_low': True
+    })
+
+    # Create reactive values for tracking which filter was last changed
+    last_changed = reactive.Value("")
+
+    # Helper function to get current filter values from any page
+    def get_current_filters():
+        # Check each page's filters and return the one that was most recently changed
+        suffixes = ["_course", "_compare", "_dept", "_data"]
+
+        # If we know which was last changed, use that
+        if last_changed.get():
+            suffix = last_changed.get()
+            try:
+                year = input[f"year_filter{suffix}"]() if hasattr(input, f"year_filter{suffix}") else \
+                filter_state.get()['year']
+                dept = input[f"dept_filter{suffix}"]() if hasattr(input, f"dept_filter{suffix}") else \
+                filter_state.get()['dept']
+                response = input[f"response_filter{suffix}"]() if hasattr(input, f"response_filter{suffix}") else \
+                filter_state.get()['response']
+                exclude = input[f"exclude_low_sample{suffix}"]() if hasattr(input, f"exclude_low_sample{suffix}") else \
+                filter_state.get()['exclude_low']
+
+                return {
+                    'year': year,
+                    'dept': dept,
+                    'response': response,
+                    'exclude_low': exclude
+                }
+            except:
+                pass
+
+        # Otherwise return stored state
+        return filter_state.get()
+
+    # Create reactive effects for each page's filters
+    @reactive.effect
+    @reactive.event(input.year_filter_course, input.dept_filter_course,
+                    input.response_filter_course, input.exclude_low_sample_course)
+    def sync_from_course():
+        last_changed.set("_course")
+        filter_state.set({
+            'year': input.year_filter_course(),
+            'dept': input.dept_filter_course(),
+            'response': input.response_filter_course(),
+            'exclude_low': input.exclude_low_sample_course()
+        })
+        update_all_filters()
+
+    @reactive.effect
+    @reactive.event(input.year_filter_compare, input.dept_filter_compare,
+                    input.response_filter_compare, input.exclude_low_sample_compare)
+    def sync_from_compare():
+        last_changed.set("_compare")
+        filter_state.set({
+            'year': input.year_filter_compare(),
+            'dept': input.dept_filter_compare(),
+            'response': input.response_filter_compare(),
+            'exclude_low': input.exclude_low_sample_compare()
+        })
+        update_all_filters()
+
+    @reactive.effect
+    @reactive.event(input.year_filter_dept, input.dept_filter_dept,
+                    input.response_filter_dept, input.exclude_low_sample_dept)
+    def sync_from_dept():
+        last_changed.set("_dept")
+        filter_state.set({
+            'year': input.year_filter_dept(),
+            'dept': input.dept_filter_dept(),
+            'response': input.response_filter_dept(),
+            'exclude_low': input.exclude_low_sample_dept()
+        })
+        update_all_filters()
+
+    @reactive.effect
+    @reactive.event(input.year_filter_data, input.dept_filter_data,
+                    input.response_filter_data, input.exclude_low_sample_data)
+    def sync_from_data():
+        last_changed.set("_data")
+        filter_state.set({
+            'year': input.year_filter_data(),
+            'dept': input.dept_filter_data(),
+            'response': input.response_filter_data(),
+            'exclude_low': input.exclude_low_sample_data()
+        })
+        update_all_filters()
+
+    # Update all filter UIs to match current state
+    def update_all_filters():
+        current = filter_state.get()
+        suffixes = ["_course", "_compare", "_dept", "_data"]
+
+        for suffix in suffixes:
+            if suffix != last_changed.get():  # Don't update the one that triggered the change
+                try:
+                    ui.update_select(f"year_filter{suffix}", selected=current['year'])
+                    ui.update_select(f"dept_filter{suffix}", selected=current['dept'])
+                    ui.update_slider(f"response_filter{suffix}", value=current['response'])
+                    ui.update_switch(f"exclude_low_sample{suffix}", value=current['exclude_low'])
+                except:
+                    pass  # Ignore if the input doesn't exist yet
+
+    # Reactive calculations using unified filter state
     @reactive.calc
     def filtered_data():
         df = feedback_df.copy()
+        current = filter_state.get()
 
         # Apply filters
-        if "All" not in input.year_filter() and input.year_filter():
-            df = df[df['Year'].isin([int(y) for y in input.year_filter()])]
+        if "All" not in current['year'] and current['year']:
+            df = df[df['Year'].isin([int(y) for y in current['year']])]
 
-        if "All" not in input.dept_filter() and input.dept_filter():
-            df = df[df['Course Letter'].isin(input.dept_filter())]
+        if "All" not in current['dept'] and current['dept']:
+            df = df[df['Course Letter'].isin(current['dept'])]
 
-        df = df[df['Responses'] >= input.response_filter()]
+        df = df[df['Responses'] >= current['response']]
 
-        if input.exclude_low_sample():
+        if current['exclude_low']:
             df = df[df['Low Sample'] == False]
 
         return df
@@ -1337,12 +1368,6 @@ def server(input: Inputs, output: Outputs, session: Session):
 
             <h3>Disclaimer</h3>
             <p>This dashboard is an unofficial tool created for exploration and insight into course feedback data. While the data is drawn from official VUW sources, it may contain inaccuracies or gaps and should not be used for formal reporting or decision-making. Interpret results with care, especially where response numbers are low. For official analysis, please refer to VUW.</p>
-
-            <div style="margin-top: 40px; padding: 20px; background-color: #e9ecef; border-radius: 5px;">
-                <h5>Custom Content Area</h5>
-                <p>This section can be customized with institution-specific information, contact details, or additional notes.</p>
-                <!-- Add your custom HTML content here -->
-            </div>
         </div>
         """
 
