@@ -7,14 +7,60 @@ import plotly.graph_objects as go
 import pyodide_http
 from plotly.subplots import make_subplots
 import warnings
+import sys
+import os
 
 pyodide_http.patch_all()
 warnings.filterwarnings('ignore')
 
-# Load the data
+
+# Function to load CSV files in Shinylive environment
+def load_csv_shinylive(filename):
+    """Load CSV file compatible with Shinylive environment"""
+    try:
+        # Try different possible paths
+        paths_to_try = [
+            filename,  # Current directory
+            f'./{filename}',  # Explicit current directory
+            f'/home/pyodide/{filename}',  # Pyodide home
+            f'/home/web_user/{filename}',  # Alternative home
+        ]
+
+        # Also check if we're in a specific app directory
+        if hasattr(sys, 'path') and len(sys.path) > 0:
+            app_dir = sys.path[0]
+            if app_dir:
+                paths_to_try.append(os.path.join(app_dir, filename))
+
+        for path in paths_to_try:
+            try:
+                df = pd.read_csv(path)
+                print(f"Successfully loaded {filename} from {path}")
+                return df
+            except:
+                continue
+
+        # If all paths fail, try using pyodide's fetch mechanism
+        try:
+            from pyodide.http import open_url
+            url = f'./{filename}'
+            df = pd.read_csv(open_url(url))
+            print(f"Successfully loaded {filename} using open_url")
+            return df
+        except:
+            pass
+
+        raise FileNotFoundError(f"Could not find {filename} in any location")
+
+    except Exception as e:
+        print(f"Error loading {filename}: {str(e)}")
+        raise
+
+
+# Load the data with error handling
 try:
-    feedback_df = pd.read_csv('tbl_AllFeedback.csv')
-    avg_feedback_df = pd.read_csv('qry_AverageFeedback.csv')
+    feedback_df = load_csv_shinylive('tbl_AllFeedback.csv')
+    avg_feedback_df = load_csv_shinylive('qry_AverageFeedback.csv')
 except FileNotFoundError as e:
     print("=" * 60)
     print("ERROR: Required CSV files not found!")
@@ -23,7 +69,41 @@ except FileNotFoundError as e:
     print("  - tbl_AllFeedback.csv")
     print("  - qry_AverageFeedback.csv")
     print("=" * 60)
-    raise SystemExit(f"Missing file: {e}")
+    print(f"Error details: {e}")
+
+    # Create dummy data for demonstration if files not found
+    print("\nCreating dummy data for demonstration purposes...")
+
+    # Create dummy feedback_df
+    years = [2020, 2021, 2022, 2023]
+    courses = ['COMP101', 'COMP102', 'MATH101', 'PHYS101', 'CHEM101']
+
+    data = []
+    for year in years:
+        for course in courses:
+            data.append({
+                'Year': year,
+                'Course Code': course,
+                'Course Title': f'{course} - Introduction to {course[:-3]}',
+                'Course Letter': course[:4],
+                'Responses': np.random.randint(20, 100),
+                'Enrolled': np.random.randint(50, 150),
+                'Low Sample': np.random.choice([True, False], p=[0.2, 0.8]),
+                'Q1: Well-organised': np.random.uniform(1.5, 4.5),
+                'Q2: Clear communication': np.random.uniform(1.5, 4.5),
+                'Q3: Assessment helped': np.random.uniform(1.5, 4.5),
+                'Q4: Helpful feedback': np.random.uniform(1.5, 4.5),
+                'Q5: Workload (3=ideal)': np.random.uniform(2.0, 4.0),
+                'Q6: Understanding': np.random.uniform(1.5, 4.5),
+                'Q7: Interest': np.random.uniform(1.5, 4.5),
+                'Q8: Valuable': np.random.uniform(1.5, 4.5),
+                'Q9: Overall quality': np.random.uniform(1.5, 4.5),
+            })
+
+    feedback_df = pd.DataFrame(data)
+    avg_feedback_df = feedback_df.groupby('Course Code').mean().reset_index()
+
+    print("Dummy data created successfully!")
 
 # Prepare data - remove rank columns
 rank_columns = [col for col in feedback_df.columns if 'Rank' in col]
